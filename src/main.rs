@@ -43,13 +43,18 @@ fn execute(line: &String) {
 }
 
 fn execute_program(path: String, args: Vec<&str>) {
-    let mut child = std::process::Command::new(path)
+    match std::process::Command::new(path)
         .args(args.iter().skip(1))
         .stdout(Stdio::inherit())
         .spawn()
-        .expect("I can't do anything.");
-    child.wait().expect("I mean really.");
-    io::stdout().flush().unwrap();
+        .as_mut()
+    {
+        Err(e) => eprintln!("{:?}", e),
+        Ok(c) => {
+            c.wait().expect("I mean really.");
+            io::stdout().flush().unwrap();
+        }
+    }
 }
 
 fn execute_internal_program(command: InternalCommand) {
