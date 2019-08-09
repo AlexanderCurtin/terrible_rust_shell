@@ -5,6 +5,18 @@ use std::process::*;
 extern crate regex;
 use regex::Regex;
 
+
+#[macro_use]
+extern crate pest_derive;
+
+extern crate pest;
+use pest::Parser;
+
+#[derive(Parser)]
+#[grammar="grammar.pest"]
+struct ShellParser;
+
+
 pub enum ShellCommand {
     InternalCommand(InternalCommand),
     ProgramName(String),
@@ -30,6 +42,8 @@ fn prompt() {
 
 fn execute(line: &String) {
     let parsed_args = parse(line);
+    println!("cool beans");
+    parsed_args.iter().for_each(|x| println!("{}", x));
     let command = match parsed_args.first() {
         Some(x) => x,
         None => return,
@@ -64,8 +78,11 @@ fn execute_internal_program(command: InternalCommand) {
 }
 
 fn parse(line: &String) -> Vec<&str> {
-    let re = Regex::new(r"\s+").unwrap();
-    return re.split(line).collect();
+    let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
+    pairs.flat_map(|p| p.into_inner())
+         .filter( |x|  match x.as_rule() {  Rule::argument => true, _ => false })
+         .map(|x| x.as_str())
+         .collect()
 }
 
 fn exit_cmd() {

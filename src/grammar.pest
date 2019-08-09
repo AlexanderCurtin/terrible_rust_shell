@@ -1,0 +1,15 @@
+argument_list = {argument ~ ((space)+ ~ argument)*}
+argument = {(variable | word | double_quoted_word | single_quoted_word)+}
+word = {(regular_char+)} 
+double_quoted_word = { double_quote ~ (variable | regular_char | escaped_char | (!double_quote ~ ANY ))* ~ double_quote }
+single_quoted_word = { single_quote ~ (regular_char | escaped_char | (!single_quote ~ ANY ))* ~ single_quote }
+regular_char = {!(special_char) ~ ANY}
+special_char = { dollar | double_quote | single_quote | parenthesis | space | escape}
+variable = {dollar ~ regular_char+}
+dollar = {"$"}
+double_quote = {"\""}
+single_quote = {"'"}
+parenthesis = {"("}
+space = {" "}
+escaped_char = { escape ~ ANY }
+escape = {"\\"}
