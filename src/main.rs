@@ -81,8 +81,17 @@ fn parse(line: &String) -> Vec<&str> {
     let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
     pairs.flat_map(|p| p.into_inner())
          .filter( |x|  match x.as_rule() {  Rule::argument => true, _ => false })
-         .map(|x| x.as_str())
+         .flat_map(|x| x.into_inner())
+         .map(|x| argument_to_string(&x))
          .collect()
+}
+
+fn argument_to_string<'a>(pair: &pest::iterators::Pair<'a,Rule>) -> &'a str{
+    match pair.as_rule() {
+        Rule::double_quoted_word => pair.clone().into_inner().nth(1).unwrap().as_str(),
+        Rule::single_quoted_word => pair.clone().into_inner().nth(1).unwrap().as_str(),
+        _ => pair.as_str()
+    }
 }
 
 fn exit_cmd() {
