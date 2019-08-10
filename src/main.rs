@@ -42,8 +42,6 @@ fn prompt() {
 
 fn execute(line: &String) {
     let parsed_args = parse(line);
-    println!("cool beans");
-    parsed_args.iter().for_each(|x| println!("{}", x));
     let command = match parsed_args.first() {
         Some(x) => x,
         None => return,
