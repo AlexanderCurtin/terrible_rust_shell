@@ -1,6 +1,6 @@
 argument_list = {argument ~ ((space)+ ~ argument)*}
 argument = {(variable | word | double_quoted_word | single_quoted_word)+}
-word = {(regular_char+)} 
+word = {(regular_char|escaped_char)+} 
 double_quoted_word = { double_quote ~ double_quoted_inner ~ double_quote }
 double_quoted_inner = {(variable | regular_char | escaped_char | (!double_quote ~ ANY ))*}
 single_quoted_word = { single_quote ~ single_quoted_inner ~ single_quote }
