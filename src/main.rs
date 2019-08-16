@@ -3,8 +3,6 @@ use std::io::prelude::*;
 use std::process::*;
 
 extern crate regex;
-use regex::Regex;
-
 
 #[macro_use]
 extern crate pest_derive;
@@ -13,9 +11,8 @@ extern crate pest;
 use pest::Parser;
 
 #[derive(Parser)]
-#[grammar="grammar.pest"]
+#[grammar = "grammar.pest"]
 struct ShellParser;
-
 
 pub enum ShellCommand {
     InternalCommand(InternalCommand),
@@ -75,20 +72,61 @@ fn execute_internal_program(command: InternalCommand) {
     };
 }
 
-fn parse(line: &String) -> Vec<&str> {
-    let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
-    pairs.flat_map(|p| p.into_inner())
-         .filter( |x|  match x.as_rule() {  Rule::argument => true, _ => false })
-         .flat_map(|x| x.into_inner())
-         .map(|x| argument_to_string(&x))
-         .collect()
+/* fn find_all_tokens_of_type<'a, 'b>(
+    root: &'b pest::iterators::Pair<'a, Rule>,
+    rule: Rule,
+) -> Vec<pest::iterators::Pair<'a, Rule>> {
+    if root.as_rule() == rule {
+        return vec![root.clone()];
+    }
+    root.clone()
+        .into_inner()
+        .flat_map(|x| find_all_tokens_of_type(&x, rule))
+        .collect()
+} */
+
+#[test]
+fn test_to_strings(){
+    let mut pairs = ShellParser::parse(Rule::word, "word").expect("cool");
+    assert_eq!(vec!["word"], to_strings(&pairs.clone().next().unwrap()));
+
+    pairs = ShellParser::parse(Rule::word, "word\\\\").expect("cool");
+    assert_eq!(vec!["word\\"], to_strings(&pairs.clone().next().unwrap()));
 }
 
-fn argument_to_string<'a>(pair: &pest::iterators::Pair<'a,Rule>) -> &'a str{
+fn to_strings<'a, 'b>(pair: &'b pest::iterators::Pair<'a, Rule>) -> Vec<Box::<&'a str>>{
+    match pair.as_rule(){
+        Rule::word => {
+            let mut to_return = vec![];
+            for x in pair.clone().into_inner(){
+                to_return.append(&mut to_strings(&x));
+            }
+            to_return
+        },
+        Rule::regular_char => vec![Box::new(pair.as_str().clone())],
+        Rule::escaped_char => vec![Box::new(&pair.as_str().clone()[1..])],
+        _ => vec![]
+    }
+}
+
+fn parse(line: &String) -> Vec<&str> {
+    let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
+    pairs
+        .flat_map(|p| p.into_inner())
+        .filter(|x| match x.as_rule() {
+            Rule::argument => true,
+            _ => false,
+        })
+        .flat_map(|x| x.into_inner())
+        .map(|x| argument_to_string(&x))
+        .collect()
+}
+
+fn argument_to_string<'a>(pair: &pest::iterators::Pair<'a, Rule>) -> &'a str {
     match pair.as_rule() {
         Rule::double_quoted_word => pair.clone().into_inner().nth(1).unwrap().as_str(),
         Rule::single_quoted_word => pair.clone().into_inner().nth(1).unwrap().as_str(),
-        _ => pair.as_str()
+        _ => pair.as_str(),
     }
 }
 
