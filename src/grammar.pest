@@ -22,5 +22,6 @@ single_quote = {"'"}
 open_parenthesis = {"("}
 closed_parenthesis = {"("}
 space = {" "}
-escaped_char = { escape ~ ANY }
+escaped_char = { escape ~ escaped_tail }
+escaped_tail = {ANY}
 escape = {"\\"}

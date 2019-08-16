@@ -119,9 +119,14 @@ fn test_to_strings() {
         to_strings(pairs.clone().next().unwrap())
     );
 
-    pairs = ShellParser::parse(Rule::argument_list, r#""wow $COOLNAME" aaa $COOLNAME"#).expect("cool");
+    pairs =
+        ShellParser::parse(Rule::argument_list, r#""wow $COOLNAME" aaa $COOLNAME"#).expect("cool");
     assert_eq!(
-        vec!["wow cewl".to_string(), "aaa".to_string(), "cewl".to_string()],
+        vec![
+            "wow cewl".to_string(),
+            "aaa".to_string(),
+            "cewl".to_string()
+        ],
         to_strings(pairs.clone().next().unwrap())
     );
 }
@@ -129,11 +134,16 @@ fn test_to_strings() {
 fn to_strings(pair: pest::iterators::Pair<'_, Rule>) -> Vec<String> {
     match pair.as_rule() {
         Rule::argument_list => pair
-                .clone()
-                .into_inner()
-                .flat_map(|x| to_strings(x))
-                .collect(),
-        Rule::argument | Rule::double_quoted_word | Rule::double_quoted_inner | Rule::single_quoted_inner | Rule::single_quoted_word => {
+            .clone()
+            .into_inner()
+            .flat_map(|x| to_strings(x))
+            .collect(),
+        Rule::argument
+        | Rule::double_quoted_word
+        | Rule::double_quoted_inner
+        | Rule::single_quoted_inner
+        | Rule::single_quoted_word
+        | Rule::escaped_char => {
             let inner_vec: Vec<String> = pair
                 .clone()
                 .into_inner()
@@ -148,20 +158,21 @@ fn to_strings(pair: pest::iterators::Pair<'_, Rule>) -> Vec<String> {
             }
             vec![to_return.join("")]
         }
-        Rule::regular_char => vec![pair.as_str().to_string()],
-        Rule::escaped_char => vec![pair.as_str()[1..].to_string()],
-        Rule::variable_name => vec![std::env::var(pair.as_str()).or_else::<VarError,_>(|_| Ok("".to_string())).unwrap()],
+        Rule::regular_char | Rule::escaped_tail => vec![pair.as_str().to_string()],
+        Rule::variable_name => vec![std::env::var(pair.as_str())
+            .or_else::<VarError, _>(|_| Ok("".to_string()))
+            .unwrap()],
         Rule::variable => to_strings(pair.clone().into_inner().nth(1).unwrap()),
-        Rule::double_quoted_trivia | Rule::space | Rule::single_quoted_trivia => vec![pair.as_str().to_string()],
+        Rule::double_quoted_trivia | Rule::space | Rule::single_quoted_trivia => {
+            vec![pair.as_str().to_string()]
+        }
         _ => vec![],
     }
 }
 
 fn parse(line: &String) -> Vec<String> {
     let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
-    pairs
-        .flat_map(|p| to_strings(p))
-        .collect()
+    pairs.flat_map(|p| to_strings(p)).collect()
 }
 
 fn exit_cmd() {
