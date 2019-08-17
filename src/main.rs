@@ -1,4 +1,4 @@
-use std::env::VarError;
+use std::env::{var, VarError};
 use std::io;
 use std::io::prelude::*;
 use std::process::*;
@@ -9,6 +9,7 @@ extern crate regex;
 extern crate pest_derive;
 
 extern crate pest;
+use pest::iterators::Pair;
 use pest::Parser;
 
 #[derive(Parser)]
@@ -73,50 +74,37 @@ fn execute_internal_program(command: InternalCommand) {
     };
 }
 
-/* fn find_all_tokens_of_type<'a, 'b>(
-    root: &'b pest::iterators::Pair<'a, Rule>,
-    rule: Rule,
-) -> Vec<pest::iterators::Pair<'a, Rule>> {
-    if root.as_rule() == rule {
-        return vec![root.clone()];
-    }
-    root.clone()
-        .into_inner()
-        .flat_map(|x| find_all_tokens_of_type(&x, rule))
-        .collect()
-} */
-
 #[test]
 fn test_to_strings() {
     let mut pairs = ShellParser::parse(Rule::word, "word").expect("cool");
     assert_eq!(
         vec!["word".to_string()],
-        to_strings(pairs.clone().next().unwrap())
+        pairs.clone().next().unwrap().to_strings()
     );
 
     pairs = ShellParser::parse(Rule::word, "word\\\\").expect("cool");
     assert_eq!(
         vec!["word\\".to_string()],
-        to_strings(pairs.clone().next().unwrap())
+        pairs.clone().next().unwrap().to_strings()
     );
 
     std::env::set_var("COOLNAME", "cewl");
     pairs = ShellParser::parse(Rule::variable, "$COOLNAME").expect("cool");
     assert_eq!(
         vec!["cewl".to_string()],
-        to_strings(pairs.clone().next().unwrap())
+        pairs.clone().next().unwrap().to_strings()
     );
 
     pairs = ShellParser::parse(Rule::argument, "aaa$COOLNAME").expect("cool");
     assert_eq!(
         vec!["aaacewl".to_string()],
-        to_strings(pairs.clone().next().unwrap())
+        pairs.clone().next().unwrap().to_strings()
     );
 
     pairs = ShellParser::parse(Rule::argument_list, r#""wow" aaa $COOLNAME"#).expect("cool");
     assert_eq!(
         vec!["wow".to_string(), "aaa".to_string(), "cewl".to_string()],
-        to_strings(pairs.clone().next().unwrap())
+        pairs.clone().next().unwrap().to_strings()
     );
 
     pairs =
@@ -127,52 +115,56 @@ fn test_to_strings() {
             "aaa".to_string(),
             "cewl".to_string()
         ],
-        to_strings(pairs.clone().next().unwrap())
+        pairs.clone().next().unwrap().to_strings()
     );
 }
 
-fn to_strings(pair: pest::iterators::Pair<'_, Rule>) -> Vec<String> {
-    match pair.as_rule() {
-        Rule::argument_list => pair
-            .clone()
+trait ToStringVec {
+    fn to_strings(&mut self) -> Vec<String>;
+    fn process_children(&mut self) -> Vec<String>;
+}
+
+impl ToStringVec for Pair<'_, Rule> {
+    fn process_children(&mut self) -> Vec<String> {
+        self.clone()
             .into_inner()
-            .flat_map(|x| to_strings(x))
-            .collect(),
-        Rule::argument
-        | Rule::double_quoted_word
-        | Rule::double_quoted_inner
-        | Rule::single_quoted_inner
-        | Rule::single_quoted_word
-        | Rule::escaped_char => {
-            let inner_vec: Vec<String> = pair
-                .clone()
-                .into_inner()
-                .flat_map(|x| to_strings(x))
-                .collect();
-            vec![inner_vec.join("")]
-        }
-        Rule::word => {
-            let mut to_return = vec![];
-            for x in pair.into_inner() {
-                to_return.append(&mut to_strings(x));
-            }
-            vec![to_return.join("")]
-        }
-        Rule::regular_char | Rule::escaped_tail => vec![pair.as_str().to_string()],
-        Rule::variable_name => vec![std::env::var(pair.as_str())
-            .or_else::<VarError, _>(|_| Ok("".to_string()))
-            .unwrap()],
-        Rule::variable => to_strings(pair.clone().into_inner().nth(1).unwrap()),
-        Rule::double_quoted_trivia | Rule::space | Rule::single_quoted_trivia => {
-            vec![pair.as_str().to_string()]
-        }
-        _ => vec![],
+            .flat_map(|x| x.clone().to_strings())
+            .collect()
     }
+    fn to_strings(&mut self) -> Vec<String> {
+        match self.as_rule() {
+            Rule::argument_list => self.process_children(),
+
+            Rule::argument
+            | Rule::variable
+            | Rule::word
+            | Rule::double_quoted_word
+            | Rule::double_quoted_inner
+            | Rule::single_quoted_inner
+            | Rule::single_quoted_word
+            | Rule::escaped_char => vec![self.process_children().join("")],
+
+            Rule::regular_char | Rule::escaped_tail => vec![self.as_str().to_string()],
+
+            Rule::variable_name => vec![var_or_empty(self)],
+
+            Rule::double_quoted_trivia | Rule::space | Rule::single_quoted_trivia => {
+                vec![self.as_str().to_string()]
+            }
+            _ => vec![],
+        }
+    }
+}
+
+fn var_or_empty(pair: &mut Pair<'_, Rule>) -> String {
+    var(pair.as_str())
+        .or_else::<VarError, _>(|_| Ok("".to_string()))
+        .unwrap()
 }
 
 fn parse(line: &String) -> Vec<String> {
     let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
-    pairs.flat_map(|p| to_strings(p)).collect()
+    pairs.flat_map(|p| p.clone().to_strings()).collect()
 }
 
 fn exit_cmd() {
