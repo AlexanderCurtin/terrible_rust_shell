@@ -1,5 +1,3 @@
-use os_pipe::PipeReader;
-use os_pipe::PipeWriter;
 use std::env::var;
 use std::fs::File;
 use std::io;
@@ -49,36 +47,6 @@ fn execute(line: &String) {
         match process_command_line(command_line) {
             Err(x) => println!("{}", x),
             _ => ()
-        }
-    }
-/*     let (parsed_args, input, output) = parse(line);
-    let command = match parsed_args.first() {
-        Some(x) => x,
-        None => return,
-    };
-    let parsed_command = parse_command(command);
-
-    match parsed_command {
-        ShellCommand::ProgramName(path) => execute_program(path, parsed_args, input, output),
-        ShellCommand::InternalCommand(ic) => execute_internal_program(ic),
-    } */
-}
-
-fn execute_program(path: String, args: Vec<String>, input: Option<Stdio>, output: Option<Stdio>) {
-    let stdin = input.unwrap_or_else(|| Stdio::inherit());
-    let stdout = output.unwrap_or_else(|| Stdio::inherit());
-
-    match std::process::Command::new(path)
-        .args(args.iter().skip(1))
-        .stdout(stdout)
-        .stdin(stdin)
-        .spawn()
-        .as_mut()
-    {
-        Err(e) => eprintln!("{:?}", e),
-        Ok(c) => {
-            c.wait().expect("I mean really.");
-            io::stdout().flush().unwrap();
         }
     }
 }
@@ -256,9 +224,12 @@ fn process_command_line(pair: Pair<'_, Rule>) -> Result<(), String> {
         let cmd = current_cmd.expect("I need this to work");
         commands.push(cmd);
     }
-    commands.iter_mut().for_each(|x| {
-        x.wait();
-    });
+    commands.iter_mut().try_for_each(|x| {
+        match x.wait() {
+            Ok(_) => Ok(()),
+            Err(a) => Err(a)
+        }
+    }).unwrap_or_else(|_| eprintln!("something went wrong"));
     io::stdout().flush().unwrap();
 
     Ok(())
