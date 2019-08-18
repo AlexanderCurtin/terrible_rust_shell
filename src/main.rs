@@ -84,32 +84,32 @@ fn test_to_strings() {
     let mut pairs = ShellParser::parse(Rule::word, "word").expect("cool");
     assert_eq!(
         vec!["word".to_string()],
-        pairs.clone().next().unwrap().to_strings()
+        pairs.clone().next().unwrap().get_args()
     );
 
     pairs = ShellParser::parse(Rule::word, "word\\\\").expect("cool");
     assert_eq!(
         vec!["word\\".to_string()],
-        pairs.clone().next().unwrap().to_strings()
+        pairs.clone().next().unwrap().get_args()
     );
 
     std::env::set_var("COOLNAME", "cewl");
     pairs = ShellParser::parse(Rule::variable, "$COOLNAME").expect("cool");
     assert_eq!(
         vec!["cewl".to_string()],
-        pairs.clone().next().unwrap().to_strings()
+        pairs.clone().next().unwrap().get_args()
     );
 
     pairs = ShellParser::parse(Rule::argument, "aaa$COOLNAME").expect("cool");
     assert_eq!(
         vec!["aaacewl".to_string()],
-        pairs.clone().next().unwrap().to_strings()
+        pairs.clone().next().unwrap().get_args()
     );
 
     pairs = ShellParser::parse(Rule::argument_list, r#""wow" aaa $COOLNAME"#).expect("cool");
     assert_eq!(
         vec!["wow".to_string(), "aaa".to_string(), "cewl".to_string()],
-        pairs.clone().next().unwrap().to_strings()
+        pairs.clone().next().unwrap().get_args()
     );
 
     pairs =
@@ -120,12 +120,12 @@ fn test_to_strings() {
             "aaa".to_string(),
             "cewl".to_string()
         ],
-        pairs.clone().next().unwrap().to_strings()
+        pairs.clone().next().unwrap().get_args()
     );
 }
 
 trait ToStringVec {
-    fn to_strings(&mut self) -> Vec<String>;
+    fn get_args(&mut self) -> Vec<String>;
     fn process_children(&mut self) -> Vec<String>;
     fn get_input(&mut self) -> Option<Stdio>;
     fn get_output(&mut self) -> Option<Stdio>;
@@ -135,10 +135,10 @@ impl ToStringVec for Pair<'_, Rule> {
     fn process_children(&mut self) -> Vec<String> {
         self.clone()
             .into_inner()
-            .flat_map(|x| x.clone().to_strings())
+            .flat_map(|x| x.clone().get_args())
             .collect()
     }
-    fn to_strings(&mut self) -> Vec<String> {
+    fn get_args(&mut self) -> Vec<String> {
         match self.as_rule() {
             Rule::argument_list => self.process_children(),
 
@@ -197,13 +197,12 @@ impl ToStringVec for Pair<'_, Rule> {
 
 fn var_or_empty(pair: &mut Pair<'_, Rule>) -> String {
     var(pair.as_str())
-        .or_else::<VarError, _>(|_| Ok("".to_string()))
-        .unwrap()
+        .unwrap_or_default()
 }
 
 fn parse(line: &String) -> (Vec<String>, Option<Stdio>, Option<Stdio>) {
     let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
-    let string_vec = pairs.clone().flat_map(|p| p.clone().to_strings()).collect();
+    let string_vec = pairs.clone().flat_map(|p| p.clone().get_args()).collect();
     let input = pairs
         .clone()
         .map(|p| p.clone().get_input())
