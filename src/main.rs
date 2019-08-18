@@ -1,3 +1,5 @@
+use os_pipe::PipeReader;
+use os_pipe::PipeWriter;
 use std::env::var;
 use std::fs::File;
 use std::io;
@@ -41,7 +43,15 @@ fn prompt() {
 }
 
 fn execute(line: &String) {
-    let (parsed_args, input, output) = parse(line);
+    let command_lines = ShellParser::parse(Rule::command_line, line).expect("gotta give me a command line");
+
+    for command_line in command_lines {
+        match process_command_line(command_line) {
+            Err(x) => println!("{}", x),
+            _ => ()
+        }
+    }
+/*     let (parsed_args, input, output) = parse(line);
     let command = match parsed_args.first() {
         Some(x) => x,
         None => return,
@@ -51,7 +61,7 @@ fn execute(line: &String) {
     match parsed_command {
         ShellCommand::ProgramName(path) => execute_program(path, parsed_args, input, output),
         ShellCommand::InternalCommand(ic) => execute_internal_program(ic),
-    }
+    } */
 }
 
 fn execute_program(path: String, args: Vec<String>, input: Option<Stdio>, output: Option<Stdio>) {
@@ -193,17 +203,74 @@ fn var_or_empty(pair: &mut Pair<'_, Rule>) -> String {
     var(pair.as_str()).unwrap_or_default()
 }
 
+fn process_command_line(pair: Pair<'_, Rule>) -> Result<(), String> {
+    assert_eq!(pair.as_rule(), Rule::command_line);
+    let mut pairs = pair.into_inner();
+    let mut commands: Vec<Child> = vec![];
+    let mut last_reader: Option<Stdio> = None;
+    while pairs.peek().is_some() {
+        let current_command_rule = pairs.next().expect("could not load next command");
+        assert_eq!(current_command_rule.as_rule(), Rule::argument_list);
+
+        let (args, mut current_input, mut current_output) =
+            parse(&current_command_rule.as_str().to_string());
+
+        let parsed_command = parse_command(args.first().unwrap().as_str());
+
+        let _x = match parsed_command {
+            ShellCommand::InternalCommand(x) => return Ok(execute_internal_program(x)),
+            _ => (),
+        };
+
+        let mut stdin = None;
+        std::mem::swap(&mut last_reader, &mut stdin);
+
+        current_input = if current_input.is_some() {
+            current_input
+        } else {
+            stdin
+        };
+
+        if current_output.is_none() {
+            let (stdout, reader) = match pairs.peek() {
+                None => (None, None),
+                Some(_) => {
+                    pairs.next();
+                    let (pipe_reader, pipe_writer) = os_pipe::pipe().unwrap();
+                    (
+                        Some(Stdio::from(pipe_writer)),
+                        Some(Stdio::from(pipe_reader)),
+                    )
+                }
+            };
+            current_output = stdout;
+            last_reader = reader;
+        }
+
+        let current_cmd = Command::new(args.first().unwrap().clone())
+            .args(args.iter().skip(1))
+            .stdin(current_input.unwrap_or_else(|| Stdio::inherit()))
+            .stdout(current_output.unwrap_or_else(|| Stdio::inherit()))
+            .spawn();
+
+        let cmd = current_cmd.expect("I need this to work");
+        commands.push(cmd);
+    }
+    commands.iter_mut().for_each(|x| {
+        x.wait();
+    });
+    io::stdout().flush().unwrap();
+
+    Ok(())
+}
+
 fn parse(line: &String) -> (Vec<String>, Option<Stdio>, Option<Stdio>) {
     let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
     let string_vec = pairs.clone().flat_map(|p| p.clone().get_args()).collect();
 
-    let input = pairs
-        .clone()
-        .find_map(|p| p.clone().get_input());
+    let input = pairs.clone().find_map(|p| p.clone().get_input());
 
-    let output = pairs
-        .clone()
-        .find_map(|p| p.clone().get_output());
+    let output = pairs.clone().find_map(|p| p.clone().get_output());
     (string_vec, input, output)
 }
 
