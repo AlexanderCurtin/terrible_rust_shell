@@ -1,4 +1,4 @@
-use std::env::{var, VarError};
+use std::env::var;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -54,7 +54,7 @@ fn execute(line: &String) {
     }
 }
 
-fn execute_program(path: String, args: Vec<String>, input: Option<Stdio>, output: Option<Stdio> ) {
+fn execute_program(path: String, args: Vec<String>, input: Option<Stdio>, output: Option<Stdio>) {
     let stdin = input.unwrap_or_else(|| Stdio::inherit());
     let stdout = output.unwrap_or_else(|| Stdio::inherit());
 
@@ -124,14 +124,14 @@ fn test_to_strings() {
     );
 }
 
-trait ToStringVec {
+trait ParserHelpers {
     fn get_args(&mut self) -> Vec<String>;
     fn process_children(&mut self) -> Vec<String>;
     fn get_input(&mut self) -> Option<Stdio>;
     fn get_output(&mut self) -> Option<Stdio>;
 }
 
-impl ToStringVec for Pair<'_, Rule> {
+impl ParserHelpers for Pair<'_, Rule> {
     fn process_children(&mut self) -> Vec<String> {
         self.clone()
             .into_inner()
@@ -164,13 +164,10 @@ impl ToStringVec for Pair<'_, Rule> {
 
     fn get_input(&mut self) -> Option<Stdio> {
         match self.as_rule() {
-            Rule::argument_list | Rule::redirect | Rule::redirect_input => {
-            self
+            Rule::argument_list | Rule::redirect | Rule::redirect_input => self
                 .clone()
                 .into_inner()
-                .filter_map(|x| x.clone().get_input())
-                .nth(0)
-            },
+                .find_map(|x| x.clone().get_input()),
             Rule::filename => Some(Stdio::from(
                 File::open(self.as_str()).expect("FileNotFound"),
             )),
@@ -180,13 +177,10 @@ impl ToStringVec for Pair<'_, Rule> {
 
     fn get_output(&mut self) -> Option<Stdio> {
         match self.as_rule() {
-            Rule::argument_list | Rule::redirect | Rule::redirect_output => {
-            self
+            Rule::argument_list | Rule::redirect | Rule::redirect_output => self
                 .clone()
                 .into_inner()
-                .filter_map(|x| x.clone().get_output())
-                .nth(0)
-            },
+                .find_map(|x| x.clone().get_output()),
             Rule::filename => Some(Stdio::from(
                 File::create(self.as_str()).expect("FileNotFound"),
             )),
@@ -196,24 +190,20 @@ impl ToStringVec for Pair<'_, Rule> {
 }
 
 fn var_or_empty(pair: &mut Pair<'_, Rule>) -> String {
-    var(pair.as_str())
-        .unwrap_or_default()
+    var(pair.as_str()).unwrap_or_default()
 }
 
 fn parse(line: &String) -> (Vec<String>, Option<Stdio>, Option<Stdio>) {
     let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
     let string_vec = pairs.clone().flat_map(|p| p.clone().get_args()).collect();
+
     let input = pairs
         .clone()
-        .map(|p| p.clone().get_input())
-        .nth(0)
-        .unwrap_or_default();
+        .find_map(|p| p.clone().get_input());
 
     let output = pairs
         .clone()
-        .map(|p| p.clone().get_output())
-        .nth(0)
-        .unwrap_or_default();
+        .find_map(|p| p.clone().get_output());
     (string_vec, input, output)
 }
 
