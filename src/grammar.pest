@@ -1,4 +1,10 @@
-argument_list = {argument ~ (argument_separator ~ argument)*}
+argument_list = {(redirect|argument) ~ (argument_separator ~ (redirect|argument))*}
+redirect = {redirect_input | redirect_output}
+redirect_input = { input ~ filename }
+redirect_output = { output ~ filename }
+input = { open_carat }
+output = { close_carat }
+filename = { argument }
 argument_separator = {(space)+}
 argument = {(variable | word | double_quoted_word | single_quoted_word )+}
 word = {(regular_char|escaped_char)+} 
@@ -25,3 +31,5 @@ space = {" "}
 escaped_char = { escape ~ escaped_tail }
 escaped_tail = {ANY}
 escape = {"\\"}
+close_carat = {">"}
+open_carat = {"<"}

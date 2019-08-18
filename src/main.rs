@@ -1,4 +1,5 @@
 use std::env::{var, VarError};
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::process::*;
@@ -40,7 +41,7 @@ fn prompt() {
 }
 
 fn execute(line: &String) {
-    let parsed_args = parse(line);
+    let (parsed_args, input, output) = parse(line);
     let command = match parsed_args.first() {
         Some(x) => x,
         None => return,
@@ -48,15 +49,19 @@ fn execute(line: &String) {
     let parsed_command = parse_command(command);
 
     match parsed_command {
-        ShellCommand::ProgramName(path) => execute_program(path, parsed_args),
+        ShellCommand::ProgramName(path) => execute_program(path, parsed_args, input, output),
         ShellCommand::InternalCommand(ic) => execute_internal_program(ic),
     }
 }
 
-fn execute_program(path: String, args: Vec<String>) {
+fn execute_program(path: String, args: Vec<String>, input: Option<Stdio>, output: Option<Stdio> ) {
+    let stdin = input.unwrap_or_else(|| Stdio::inherit());
+    let stdout = output.unwrap_or_else(|| Stdio::inherit());
+
     match std::process::Command::new(path)
         .args(args.iter().skip(1))
-        .stdout(Stdio::inherit())
+        .stdout(stdout)
+        .stdin(stdin)
         .spawn()
         .as_mut()
     {
@@ -122,6 +127,8 @@ fn test_to_strings() {
 trait ToStringVec {
     fn to_strings(&mut self) -> Vec<String>;
     fn process_children(&mut self) -> Vec<String>;
+    fn get_input(&mut self) -> Option<Stdio>;
+    fn get_output(&mut self) -> Option<Stdio>;
 }
 
 impl ToStringVec for Pair<'_, Rule> {
@@ -154,6 +161,38 @@ impl ToStringVec for Pair<'_, Rule> {
             _ => vec![],
         }
     }
+
+    fn get_input(&mut self) -> Option<Stdio> {
+        match self.as_rule() {
+            Rule::argument_list | Rule::redirect | Rule::redirect_input => {
+            self
+                .clone()
+                .into_inner()
+                .filter_map(|x| x.clone().get_input())
+                .nth(0)
+            },
+            Rule::filename => Some(Stdio::from(
+                File::open(self.as_str()).expect("FileNotFound"),
+            )),
+            _ => None,
+        }
+    }
+
+    fn get_output(&mut self) -> Option<Stdio> {
+        match self.as_rule() {
+            Rule::argument_list | Rule::redirect | Rule::redirect_output => {
+            self
+                .clone()
+                .into_inner()
+                .filter_map(|x| x.clone().get_output())
+                .nth(0)
+            },
+            Rule::filename => Some(Stdio::from(
+                File::create(self.as_str()).expect("FileNotFound"),
+            )),
+            _ => None,
+        }
+    }
 }
 
 fn var_or_empty(pair: &mut Pair<'_, Rule>) -> String {
@@ -162,9 +201,21 @@ fn var_or_empty(pair: &mut Pair<'_, Rule>) -> String {
         .unwrap()
 }
 
-fn parse(line: &String) -> Vec<String> {
+fn parse(line: &String) -> (Vec<String>, Option<Stdio>, Option<Stdio>) {
     let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
-    pairs.flat_map(|p| p.clone().to_strings()).collect()
+    let string_vec = pairs.clone().flat_map(|p| p.clone().to_strings()).collect();
+    let input = pairs
+        .clone()
+        .map(|p| p.clone().get_input())
+        .nth(0)
+        .unwrap_or_default();
+
+    let output = pairs
+        .clone()
+        .map(|p| p.clone().get_output())
+        .nth(0)
+        .unwrap_or_default();
+    (string_vec, input, output)
 }
 
 fn exit_cmd() {
@@ -180,5 +231,5 @@ fn parse_command(s: &str) -> ShellCommand {
 
 #[test]
 fn test_parse() {
-    assert_eq!(parse(&String::from("1 2 3")), vec!["1", "2", "3"]);
+    assert_eq!(parse(&String::from("1 2 3")).0, vec!["1", "2", "3"]);
 }
