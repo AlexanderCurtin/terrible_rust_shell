@@ -176,12 +176,11 @@ fn process_command_line(pair: Pair<'_, Rule>) -> Result<(), String> {
     let mut pairs = pair.into_inner();
     let mut commands: Vec<Child> = vec![];
     let mut last_reader: Option<Stdio> = None;
-    while pairs.peek().is_some() {
-        let current_command_rule = pairs.next().expect("could not load next command");
-        assert_eq!(current_command_rule.as_rule(), Rule::argument_list);
+    while let Some(cur_pair) = pairs.next() {
+        assert_eq!(cur_pair.as_rule(), Rule::argument_list);
 
-        let (args, mut current_input, mut current_output) =
-            parse(&current_command_rule.as_str().to_string());
+        let (args, parsed_input, parsed_output) =
+            parse(&cur_pair.as_str().to_string());
 
         let parsed_command = parse_command(args.first().unwrap().as_str());
 
@@ -190,16 +189,14 @@ fn process_command_line(pair: Pair<'_, Rule>) -> Result<(), String> {
             _ => (),
         };
 
-        let mut stdin = None;
-        std::mem::swap(&mut last_reader, &mut stdin);
+        let mut passed_input = None;
+        std::mem::swap(&mut last_reader, &mut passed_input);
 
-        current_input = if current_input.is_some() {
-            current_input
-        } else {
-            stdin
-        };
+        let current_input = select_current_input(parsed_input, passed_input);
 
-        if current_output.is_none() {
+        let mut current_output = None;
+
+        if parsed_output.is_none() {
             let (stdout, reader) = match pairs.peek() {
                 None => (None, None),
                 Some(_) => {
@@ -211,14 +208,14 @@ fn process_command_line(pair: Pair<'_, Rule>) -> Result<(), String> {
                     )
                 }
             };
-            current_output = stdout;
+            current_output = stdout.or_else(|| Some(Stdio::inherit()));
             last_reader = reader;
         }
 
         let current_cmd = Command::new(args.first().unwrap().clone())
             .args(args.iter().skip(1))
-            .stdin(current_input.unwrap_or_else(|| Stdio::inherit()))
-            .stdout(current_output.unwrap_or_else(|| Stdio::inherit()))
+            .stdin(current_input.unwrap())
+            .stdout(current_output.unwrap())
             .spawn();
 
         let cmd = current_cmd.expect("I need this to work");
@@ -233,6 +230,11 @@ fn process_command_line(pair: Pair<'_, Rule>) -> Result<(), String> {
     io::stdout().flush().unwrap();
 
     Ok(())
+}
+
+
+fn select_current_input(parsed_input: Option<Stdio>, passed_input: Option<Stdio>) -> Option<Stdio>{
+    return parsed_input.or_else(|| passed_input).or_else(|| Some(Stdio::inherit()));
 }
 
 fn parse(line: &String) -> (Vec<String>, Option<Stdio>, Option<Stdio>) {
