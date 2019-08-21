@@ -62,32 +62,32 @@ fn test_to_strings() {
     let mut pairs = ShellParser::parse(Rule::word, "word").expect("cool");
     assert_eq!(
         vec!["word".to_string()],
-        pairs.clone().next().unwrap().get_args()
+        pairs.next().unwrap().get_args()
     );
 
     pairs = ShellParser::parse(Rule::word, "word\\\\").expect("cool");
     assert_eq!(
         vec!["word\\".to_string()],
-        pairs.clone().next().unwrap().get_args()
+        pairs.next().unwrap().get_args()
     );
 
     std::env::set_var("COOLNAME", "cewl");
     pairs = ShellParser::parse(Rule::variable, "$COOLNAME").expect("cool");
     assert_eq!(
         vec!["cewl".to_string()],
-        pairs.clone().next().unwrap().get_args()
+        pairs.next().unwrap().get_args()
     );
 
     pairs = ShellParser::parse(Rule::argument, "aaa$COOLNAME").expect("cool");
     assert_eq!(
         vec!["aaacewl".to_string()],
-        pairs.clone().next().unwrap().get_args()
+        pairs.next().unwrap().get_args()
     );
 
     pairs = ShellParser::parse(Rule::argument_list, r#""wow" aaa $COOLNAME"#).expect("cool");
     assert_eq!(
         vec!["wow".to_string(), "aaa".to_string(), "cewl".to_string()],
-        pairs.clone().next().unwrap().get_args()
+        pairs.next().unwrap().get_args()
     );
 
     pairs =
@@ -98,25 +98,24 @@ fn test_to_strings() {
             "aaa".to_string(),
             "cewl".to_string()
         ],
-        pairs.clone().next().unwrap().get_args()
+        pairs.next().unwrap().get_args()
     );
 }
 
 trait ParserHelpers {
-    fn get_args(&mut self) -> Vec<String>;
-    fn process_children(&mut self) -> Vec<String>;
-    fn get_input(&mut self) -> Option<Stdio>;
-    fn get_output(&mut self) -> Option<Stdio>;
+    fn get_args(self) -> Vec<String>;
+    fn process_children(self) -> Vec<String>;
+    fn get_input(self) -> Option<Stdio>;
+    fn get_output(self) -> Option<Stdio>;
 }
 
 impl ParserHelpers for Pair<'_, Rule> {
-    fn process_children(&mut self) -> Vec<String> {
-        self.clone()
-            .into_inner()
-            .flat_map(|x| x.clone().get_args())
+    fn process_children(self) -> Vec<String> {
+        self.into_inner()
+            .flat_map(|x| x.get_args())
             .collect()
     }
-    fn get_args(&mut self) -> Vec<String> {
+    fn get_args(self) -> Vec<String> {
         match self.as_rule() {
             Rule::argument_list => self.process_children(),
 
@@ -140,12 +139,11 @@ impl ParserHelpers for Pair<'_, Rule> {
         }
     }
 
-    fn get_input(&mut self) -> Option<Stdio> {
+    fn get_input(self) -> Option<Stdio> {
         match self.as_rule() {
             Rule::argument_list | Rule::redirect | Rule::redirect_input => self
-                .clone()
                 .into_inner()
-                .find_map(|x| x.clone().get_input()),
+                .find_map(|x| x.get_input()),
             Rule::filename => Some(Stdio::from(
                 File::open(self.as_str()).expect("FileNotFound"),
             )),
@@ -153,12 +151,11 @@ impl ParserHelpers for Pair<'_, Rule> {
         }
     }
 
-    fn get_output(&mut self) -> Option<Stdio> {
+    fn get_output(self) -> Option<Stdio> {
         match self.as_rule() {
             Rule::argument_list | Rule::redirect | Rule::redirect_output => self
-                .clone()
                 .into_inner()
-                .find_map(|x| x.clone().get_output()),
+                .find_map(|x| x.get_output()),
             Rule::filename => Some(Stdio::from(
                 File::create(self.as_str()).expect("FileNotFound"),
             )),
@@ -167,7 +164,7 @@ impl ParserHelpers for Pair<'_, Rule> {
     }
 }
 
-fn var_or_empty(pair: &mut Pair<'_, Rule>) -> String {
+fn var_or_empty(pair: Pair<'_, Rule>) -> String {
     var(pair.as_str()).unwrap_or_default()
 }
 
@@ -212,7 +209,7 @@ fn process_command_line(pair: Pair<'_, Rule>) -> Result<(), String> {
             last_reader = reader;
         }
 
-        let current_cmd = Command::new(args.first().unwrap().clone())
+        let current_cmd = Command::new(args.first().unwrap())
             .args(args.iter().skip(1))
             .stdin(current_input.unwrap())
             .stdout(current_output.unwrap())
@@ -239,11 +236,11 @@ fn select_current_input(parsed_input: Option<Stdio>, passed_input: Option<Stdio>
 
 fn parse(line: &String) -> (Vec<String>, Option<Stdio>, Option<Stdio>) {
     let pairs = ShellParser::parse(Rule::argument_list, line).expect("shiiit");
-    let string_vec = pairs.clone().flat_map(|p| p.clone().get_args()).collect();
+    let string_vec = pairs.clone().flat_map(|p| p.get_args()).collect();
 
-    let input = pairs.clone().find_map(|p| p.clone().get_input());
+    let input = pairs.clone().find_map(|p| p.get_input());
 
-    let output = pairs.clone().find_map(|p| p.clone().get_output());
+    let output = pairs.clone().find_map(|p| p.get_output());
     (string_vec, input, output)
 }
 
