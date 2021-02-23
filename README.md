@@ -6,6 +6,8 @@ actually knowing anything.
 
 It supports pipes, quotes vs apostrophes, environment variables.
 
-I wanted to support nested commands, but kind of hit an roadblock, mostly
+I wanted to support nested commands, but kind of hit a roadblock. mostly
 passing inputs/outputs around in a way that the borrow checker was happy
 with.
+
+Now I can't even read it.
